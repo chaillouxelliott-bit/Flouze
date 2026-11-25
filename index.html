@@ -601,6 +601,13 @@ async function boot(){try{db=await claude.use('db');const u=await claude.use('us
     cfg=c;months=ms;if($('sheet').classList.contains('on'))return;start()},()=>{clearTimeout(timer);useLocal('Enregistré dans ce navigateur')})}
 window.addEventListener('hashchange',()=>{tab='dep';vm=curM;openG.clear();focusG=null;showAll=false;route();window.scrollTo(0,0)});
 $('view').innerHTML='<div class="head"><div class="center"><small>Chargement…</small></div></div>';
+// ---------- mise à jour automatique (version web) ----------
+const APP_VERSION='2026-11-25.7';
+async function checkUpdate(){if(!/github\.io$/.test(location.hostname))return;
+  try{const r=await fetch(location.pathname,{cache:'reload'});const t=await r.text();const m=t.match(/APP_VERSION='([^']+)'/);
+    if(m&&m[1]!==APP_VERSION){if($('sheet').classList.contains('on')||$('menu').classList.contains('on')){setTimeout(checkUpdate,30000);return}location.reload()}}catch(_){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate()});
+setTimeout(checkUpdate,1500);
 new MutationObserver(()=>document.documentElement.classList.toggle('lock',$('sheet').classList.contains('on')||$('menu').classList.contains('on'))).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
 boot();
 }
