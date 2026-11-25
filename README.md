@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.svg" width="120" alt="Logo Flouze"></p>
+
 # Flouze
 
 Une appli simple pour faire ses comptes au quotidien.
