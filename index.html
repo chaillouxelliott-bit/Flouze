@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Flouze">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0f2a3d">
+<meta name="theme-color" content="#123a52">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -37,7 +37,7 @@ input,select{min-height:48px;padding:0 14px;border:1.5px solid var(--line);backg
 input:focus,select:focus{border-color:var(--lil);outline:none}
 .mut{color:var(--mut);font-size:14px}.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .neg{color:var(--neg)}.pos{color:var(--pos)}
-.head{background:radial-gradient(520px 320px at 92% -20%,rgba(255,122,89,.45),transparent 65%),radial-gradient(560px 340px at -5% 115%,rgba(20,184,166,.45),transparent 65%),linear-gradient(160deg,#123a52,#0b2233);color:#f2f8fb;padding:calc(18px + env(safe-area-inset-top)) 0 84px}
+.head{background:radial-gradient(420px 220px at 96% 55%,rgba(255,122,89,.32),transparent 70%),radial-gradient(560px 340px at -5% 115%,rgba(20,184,166,.45),transparent 65%),linear-gradient(180deg,#123a52 0%,#0f3047 45%,#0b2233 100%);color:#f2f8fb;padding:calc(18px + env(safe-area-inset-top)) 0 84px}
 .bar1{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:760px;margin:0 auto;padding:0 max(4vw,14px)}
 .bar1 h1{font-size:19px;margin:0;font-weight:600;text-align:center;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hb{background:rgba(255,255,255,.12);color:#fff;min-width:44px;padding:0 14px}
@@ -124,7 +124,8 @@ h2{font-size:20px;margin:0 0 10px;font-weight:600}
 #tmsg{overflow:hidden;text-overflow:ellipsis}#toast button{flex:none;min-height:36px;background:var(--cor);color:#fff}
 #note{text-align:center;font-size:12px;color:#9dbccb;margin-top:4px}
 @media(prefers-reduced-motion:no-preference){.bar i,.minibar i{transition:width .4s ease}#sheet .in{animation:up .22s ease}@keyframes up{from{transform:translateY(30px);opacity:.4}}}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:#123a52;overscroll-behavior:none}
+body{min-height:100vh;min-height:100dvh}
 body{overscroll-behavior-y:none;-webkit-font-smoothing:antialiased}
 .app{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
 button,label.chk,summary{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
