@@ -204,6 +204,7 @@ function periodTx(k){const s=pStart(k),e=pEnd(k),l=[];[...new Set([s.slice(0,7),
 const parseA=v=>Math.round(parseFloat(String(v).replace(/\s/g,'').replace(',','.'))*100)/100;
 
 let cfg=null,months={},db=null,uid=null,local=false,dirty=new Set(),busy=0,tt,ready=false;
+let shared=false,unsub=null,shMsg='',shStop=false,shBusy=false;const base=()=>shared?'foyer':'data/users/'+uid;
 let tab='ops',vm=curM,openG=new Set(),focusG=null,showAll=false,lastDel=null;
 const defCfg=()=>({accounts:[{id:'principal',name:'Compte principal',type:'courant',init:0,since:today},{id:'epargne',name:'Livret A',type:'livreta',init:0,since:today}],budgets:[],recur:[]});
 const M=k=>months[k]||(months[k]={tx:[],skip:[]});
@@ -475,6 +476,7 @@ function renderSettings(){
      <p class="mut" id="bkmsg" style="text-align:center;margin:10px 0 0">${esc(bkMsg)}</p>
      ${restoreData?`<div style="background:var(--soft);border-radius:16px;padding:12px;margin-top:10px"><b>Restaurer la sauvegarde du ${esc(dShort(restoreData.date||today))} ?</b><p class="mut" style="margin:4px 0 10px">${restoreData.cfg.accounts.length} compte(s). Tout ce qui est dans l'appli sera remplacé par ce fichier.</p><button class="pri" id="rsok" style="width:100%">Oui, restaurer</button><button id="rsno" style="width:100%;margin-top:6px">Annuler</button></div>`:''}
      <p class="mut" style="margin:12px 0 0">Chaque début de mois, l'accueil te rappelle de faire ta sauvegarde en un clic.</p></div>
+   ${shareCard()}
    <div class="card"><h2>Jour de paie</h2><p class="mut" style="margin-top:-4px">Ton mois commence le jour où tu touches ton salaire. Exemple : payé le 26, ton mois de décembre va du 26 novembre au 25 décembre.</p><select id="payday" aria-label="Jour de paie"><option value="1"${PD===1?' selected':''}>Le 1er (mois normal)</option>${Array.from({length:30},(_,i)=>i+2).map(d=>`<option value="${d}"${PD===d?' selected':''}>Le ${d} du mois</option>`).join('')}</select>${PD>1?`<p class="mut" style="margin:8px 0 0">Mois en cours (${esc(mName(curM))}) : du ${esc(dMini(pStart(curM)))} au ${esc(dMini(pEnd(curM)))}.</p>`:''}</div>
    <div class="card"><h2>Alerte fin de mois</h2><p class="mut" style="margin-top:-4px">Préviens-moi quand le compte courant doit finir le mois sous :</p><div class="amt" style="margin:0"><input id="seuil" inputmode="decimal" value="${esc(SEUIL)}" aria-label="Seuil d'alerte" style="font-size:26px;min-height:56px"><span>€</span></div></div>
    <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 style="margin:0">Catégories</h2><button id="gadd" style="min-height:38px;font-size:14px">+ Nouvelle famille</button></div>
@@ -490,6 +492,7 @@ function renderSettings(){
   $('wipeops').onclick=()=>{if(wipe!=='ops'){wipe='ops';renderSettings();return}wipe=null;for(const k in months){months[k]={tx:[],skip:[]};mark(k)}cfg.recur=[];mark('cfg');renderSettings();toast('Toutes les opérations sont effacées')};
   $('wipeall').onclick=()=>{if(wipe!=='all'){wipe='all';renderSettings();return}wipe=null;for(const k in months){months[k]={tx:[],skip:[]};mark(k)}const lb=cfg.lastBackup;cfg=defCfg();cfg.lastBackup=lb;ensure();mark('cfg');renderSettings();toast('Appli remise à zéro')};
   $('bkdl').onclick=downloadBackup;$('bkdrive').onclick=driveBackup;
+  if($('shon'))$('shon').onclick=startShare;if($('shoff'))$('shoff').onclick=stopShare;
   $('bkfile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||!d.cfg||!Array.isArray(d.cfg.accounts)||typeof d.months!=='object')throw 0;restoreData=d;bkMsg=''}catch(_){restoreData=null;bkMsg='Ce fichier n\'est pas une sauvegarde de l\'appli.'}renderSettings()};r.readAsText(f)};
   if($('rsok'))$('rsok').onclick=()=>{const d=restoreData;restoreData=null;for(const k in months)if(!(k in d.months)){months[k]={tx:[],skip:[]};mark(k)}
     cfg=d.cfg;months={};for(const k in d.months)months[k]={tx:Array.isArray(d.months[k].tx)?d.months[k].tx:[],skip:Array.isArray(d.months[k].skip)?d.months[k].skip:[]};
@@ -509,6 +512,27 @@ function renderSettings(){
   $('greset').onclick=()=>{const used=[];cfg.groups.forEach(g=>g.cats.forEach(c=>{if(!CATDEF[c[0]]&&catUsed(c[0]))used.push([g,c])}));
     const fresh=JSON.parse(JSON.stringify(DEF_GROUPS));used.forEach(([g,c])=>{let fg=fresh.find(x=>x.id==='autre');fg.cats.push(c)});cfg.groups=fresh;ensure();mark('cfg');renderSettings();toast('Catégories par défaut remises')};
   note()}
+// ---------- partage ----------
+function shareCard(){if(local)return`<div class="card"><h2>Partager mes comptes</h2><p class="mut" style="margin-top:-4px">Ouvre Flouze dans claude.ai pour pouvoir partager tes comptes avec quelqu'un.</p></div>`;
+  const m=shMsg?`<p class="mut" style="text-align:center;margin:10px 0 0">${esc(shMsg)}</p>`:'';
+  if(!shared)return`<div class="card"><h2>Partager mes comptes</h2><p class="mut" style="margin-top:-4px">Pour faire un budget à deux : vous voyez et modifiez les mêmes comptes, chacun sur son téléphone, en temps réel.</p>
+    <button class="pri" id="shon" style="width:100%"${shBusy?' disabled':''}>${shBusy?'Partage en cours…':'Partager mes comptes'}</button>${m}</div>`;
+  return`<div class="card" style="border:2px solid #14b8a6"><h2>Comptes partagés ✓</h2><p class="mut" style="margin-top:-4px">Tes comptes sont partagés. Pour inviter quelqu'un : dans claude.ai, ouvre le menu « Partager » de l'appli, ajoute la personne et donne-lui le droit de <b>modifier</b>. Elle verra les mêmes comptes que toi.</p>
+    <button class="del" id="shoff" style="border:1.5px solid var(--neg)"${shBusy?' disabled':''}>${shBusy?'Un instant…':shStop?'Confirmer : arrêter le partage':'Arrêter le partage'}</button>
+    <p class="mut" style="text-align:center;margin:4px 0 0">Tu gardes une copie de tous les comptes pour toi. L'autre personne ne les voit plus.</p>${m}</div>`}
+async function copyAll(path){const col=db.collection(path);
+  await col.doc('cfg7').set(JSON.parse(JSON.stringify(cfg)));
+  for(const k in months)await col.doc('z'+k).set(JSON.parse(JSON.stringify(M(k))))}
+async function startShare(){if(shBusy)return;shBusy=true;shMsg='';renderSettings();
+  try{await flush();await copyAll('foyer');shared=true;shMsg='C\'est partagé ! Invite maintenant la personne depuis claude.ai.';subscribe()}
+  catch(e){shared=false;shMsg='Partage impossible pour le moment. Réessaie dans un instant.'}
+  shBusy=false;if(location.hash==='#parametres')renderSettings()}
+async function stopShare(){if(shBusy)return;if(!shStop){shStop=true;renderSettings();return}shStop=false;shBusy=true;shMsg='';renderSettings();
+  try{await flush();await copyAll('data/users/'+uid);
+    const snap=await db.collection('foyer').get();for(const d of snap.docs){try{await db.collection('foyer').doc(d.id).delete()}catch(_){}}
+    shared=false;shMsg='Partage arrêté. Tes comptes sont de nouveau rien qu\'à toi.';subscribe()}
+  catch(e){shMsg='Impossible d\'arrêter le partage pour le moment. Réessaie dans un instant.'}
+  shBusy=false;if(location.hash==='#parametres')renderSettings()}
 function backupData(){return JSON.stringify({app:'mes-comptes',version:1,date:today,cfg,months},null,1)}
 async function downloadBackup(){let dl=null;try{dl=await claude.use('downloads')}catch(_){}
   if(!dl){try{await navigator.clipboard.writeText(backupData());bkMsg='Téléchargement indisponible ici : la sauvegarde a été copiée, colle-la dans un fichier.'}catch(_){bkMsg='Téléchargement indisponible dans cette vue.'}renderSettings();return}
@@ -602,21 +626,25 @@ function materialize(){const ch=new Set();
 let noteTxt='Chargement…';function note(){const n=$('note');if(n)n.textContent=noteTxt}
 function mark(key){dirty.add(key);clearTimeout(tt);tt=setTimeout(flush,400);if(local){try{localStorage.setItem('mes-comptes-v7',JSON.stringify({cfg,months}))}catch(e){}}}
 async function flush(){if(local){dirty.clear();return}const keys=[...dirty];dirty.clear();busy++;
-  try{for(const k of keys){const ref=db.collection('data/users/'+uid).doc(k==='cfg'?'cfg7':'z'+k);const body=JSON.parse(JSON.stringify(k==='cfg'?cfg:M(k)));
+  try{for(const k of keys){const ref=db.collection(base()).doc(k==='cfg'?'cfg7':'z'+k);const body=JSON.parse(JSON.stringify(k==='cfg'?cfg:M(k)));
     try{await ref.set(body)}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,900));try{await ref.set(body)}catch(_){}}else{noteTxt='Enregistrement impossible pour le moment.';note()}}}}finally{busy--}}
 function start(){if(cfg&&cfg.payday==null){const s=(cfg.recur||[]).find(r=>r.k==='rev'&&r.c==='salaire'&&r.day>1);if(s){cfg.payday=s.day;mark('cfg')}}
   ensure();if(!ready){ready=true;vm=curM;if(!cfg.groups)mark('cfg');materialize()}route()}
 function useLocal(msg){local=true;try{const d=JSON.parse(localStorage.getItem('mes-comptes-v7')||'null');if(d){cfg=d.cfg;months=d.months||{}}}catch(e){}if(!cfg){cfg=defCfg();mark('cfg')}noteTxt=msg;start()}
 async function boot(){try{db=await claude.use('db');const u=await claude.use('user');uid=u?await u.id():null}catch(e){db=null}
   if(!db||!uid)return useLocal('Enregistré dans ce navigateur');
+  try{const d=await Promise.race([db.collection('foyer').doc('cfg7').get(),new Promise((_,r)=>setTimeout(()=>r(0),6000))]);shared=!!(d&&d.exists)}catch(_){shared=false}
+  subscribe()}
+function subscribe(){if(unsub){try{unsub()}catch(_){}unsub=null}
   const timer=setTimeout(()=>{noteTxt='Connexion lente…';if(!cfg){cfg=defCfg();start()}else note()},10000);
-  db.collection('data/users/'+uid).onSnapshot(snap=>{if(dirty.size||busy)return;let c=null;const ms={};
+  unsub=db.collection(base()).onSnapshot(snap=>{if(dirty.size||busy||shBusy)return;let c=null;const ms={};
     snap.docs.forEach(d=>{if(!d.exists)return;const v=JSON.parse(JSON.stringify(d.data()));if(d.id==='cfg7')c=v;else if(/^z\d{4}-\d\d$/.test(d.id))ms[d.id.slice(1)]={tx:Array.isArray(v.tx)?v.tx:[],skip:Array.isArray(v.skip)?v.skip:[]}});
     if(snap.metadata.fromCache&&!c)return;
     clearTimeout(timer);if(!snap.metadata.fromCache)noteTxt='';
+    if(!c&&shared){shared=false;subscribe();return}
     if(!c){cfg=defCfg();mark('cfg');months=ms;start();return}
     ['accounts','budgets','recur'].forEach(k=>{if(!Array.isArray(c[k]))c[k]=[]});if(!c.accounts.length)c.accounts=defCfg().accounts;
-    cfg=c;months=ms;if($('sheet').classList.contains('on'))return;start()},()=>{clearTimeout(timer);useLocal('Enregistré dans ce navigateur')})}
+    cfg=c;months=ms;if($('sheet').classList.contains('on'))return;start()},()=>{clearTimeout(timer);if(shared){shared=false;subscribe();return}useLocal('Enregistré dans ce navigateur')})}
 window.addEventListener('hashchange',()=>{tab='ops';vm=curM;openG.clear();focusG=null;showAll=false;route();window.scrollTo(0,0)});
 $('view').innerHTML='<div class="head"><div class="center"><small>Chargement…</small></div></div>';
 // ---------- mise à jour automatique (version web) ----------

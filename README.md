@@ -12,5 +12,6 @@ Une appli simple pour faire ses comptes au quotidien.
 - Projection dans le temps, y compris l'évolution de l'épargne sur 12 mois
 - Alerte et conseils quand la fin de mois est serrée
 - Sauvegarde et restauration d'un fichier
+- Partage des comptes avec une autre personne (budget à deux), en temps réel
 
 Tout tient dans `index.html`. Ouvert en dehors de claude.ai, les données sont enregistrées dans le navigateur.
