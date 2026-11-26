@@ -120,6 +120,9 @@ h2{font-size:20px;margin:0 0 10px;font-weight:600}
 .sbc{display:flex;flex-direction:column;gap:4px;background:none;border-radius:10px;padding:4px 1px;min-height:0;height:100%}.sbc.sel{background:var(--soft);box-shadow:inset 0 0 0 1.5px var(--ink)}.sbc:hover{filter:none;background:var(--soft)}
 .sb{flex:1;display:flex;flex-direction:column-reverse;align-items:center;justify-content:flex-start}.sb i{display:block;width:72%;max-width:22px;min-height:0}.sb i:last-child{border-radius:6px 6px 0 0}.sb i:first-child{border-radius:0 0 3px 3px}.sb i:only-child{border-radius:6px 6px 3px 3px}
 .sdet{background:var(--soft);border-radius:16px;padding:10px 14px;margin-top:10px}.sdet .l{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:15px}
+.rico{width:34px;height:34px;border-radius:50%;background:#ec4899;color:#fff;display:grid;place-items:center;flex:none;box-shadow:0 4px 10px -4px rgba(236,72,153,.7)}
+.tag.rec{background:#ffe0ef;color:#c2255c;font-weight:600}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .tag.rec{background:#4a1d35;color:#ff9cc6}}
 #toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);max-width:calc(100vw - 24px);background:var(--ink);color:var(--bg);padding:6px 6px 6px 18px;border-radius:999px;display:none;align-items:center;gap:10px;z-index:40;white-space:nowrap}
 #tmsg{overflow:hidden;text-overflow:ellipsis}#toast button{flex:none;min-height:36px;background:var(--cor);color:#fff}
 #note{text-align:center;font-size:12px;color:#9dbccb;margin-top:4px}
@@ -330,7 +333,8 @@ function renderAcc(a){const p=proj(a),ty=TY(a.type);
 function opRow(t,a){const out=t.k==='dep'||(t.k==='vir'&&t.acc===a.id);let lab,col;
   if(t.k==='dep'){const c=CAT[t.c];lab=c?c.n:'Dépense';col=c?c.c:'#999'}else if(t.k==='rev'){lab=revN(t.c);col='#0f9a6c'}else{lab=t.acc===a.id?'Vers '+(acc(t.to)?.name||'?'):'De '+(acc(t.acc)?.name||'?');col='#5eead4'}
   const prev=t.virtual||t.d>today;
-  return`<button class="row" ${t.virtual?`data-vop="${esc(t.r)}|${esc(t.d.slice(0,7))}"`:`data-op="${esc(t.id)}"`}><i class="dot" style="background:${col}"></i><div><div>${esc(t.l||lab)}${t.r?'<span class="tag">tous les mois</span>':''}${prev?'<span class="tag">prévu</span>':''}</div><div class="mut">${esc(dShort(t.d))}${t.l?' · '+esc(lab):''}</div></div><span class="num ${out?'':'pos'}">${out?'−':'+'} ${eur(t.a)}</span></button>`}
+  return`<button class="row" ${t.virtual?`data-vop="${esc(t.r)}|${esc(t.d.slice(0,7))}"`:`data-op="${esc(t.id)}"`}>${t.r&&prev?REC_ICO:`<i class="dot" style="background:${col}"></i>`}<div><div>${esc(t.l||lab)}${t.r?`<span class="tag${prev?' rec':''}">tous les mois</span>`:''}${prev?'<span class="tag">prévu</span>':''}</div><div class="mut">${esc(dShort(t.d))}${t.l?' · '+esc(lab):''}</div></div><span class="num ${out?'':'pos'}">${out?'−':'+'} ${eur(t.a)}</span></button>`}
+const REC_ICO='<span class="rico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12V9a3 3 0 0 1 3-3h13l-3-3M20 12v3a3 3 0 0 1-3 3H4l3 3"/></svg></span>';
 function arc(a0,a1,r){const P=a=>[Math.sin(a)*r,-Math.cos(a)*r],[x0,y0]=P(a0),[x1,y1]=P(a1);return`M0 0L${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${a1-a0>Math.PI?1:0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}Z`}
 function tabDep(a){const fut=vm>curM;const byC={},plan={};let tot=0,ptot=0;
   txOfMonth(vm).forEach(t=>{if(t.k==='dep'&&t.acc===a.id){const v=+t.a;byC[t.c]=(byC[t.c]||0)+v;tot+=v;if(t.virtual||t.d>today){plan[t.c]=(plan[t.c]||0)+v;ptot+=v}}});
@@ -648,7 +652,7 @@ function subscribe(){if(unsub){try{unsub()}catch(_){}unsub=null}
 window.addEventListener('hashchange',()=>{tab='ops';vm=curM;openG.clear();focusG=null;showAll=false;route();window.scrollTo(0,0)});
 $('view').innerHTML='<div class="head"><div class="center"><small>Chargement…</small></div></div>';
 // ---------- mise à jour automatique (version web) ----------
-const APP_VERSION='2026-11-26.4';
+const APP_VERSION='2026-11-26.5';
 async function checkUpdate(){if(!/github\.io$/.test(location.hostname))return;
   try{const r=await fetch(location.pathname,{cache:'reload'});const t=await r.text();const m=t.match(/APP_VERSION='([^']+)'/);
     if(m&&m[1]!==APP_VERSION){if($('sheet').classList.contains('on')||$('menu').classList.contains('on')){setTimeout(checkUpdate,30000);return}location.reload()}}catch(_){}}
