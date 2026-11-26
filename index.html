@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Flouze">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0b0b0b">
+<meta name="theme-color" content="#0d1f1a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -143,18 +143,24 @@ html.lock,html.lock body{overflow:hidden}
 .acc .t{min-width:0}.acc .t b{overflow-wrap:anywhere}.acc .v{flex:none;max-width:58%}.acc .v .mut{display:block;white-space:normal;line-height:1.3;margin-top:2px}.acc .v .tag{display:inline-block;margin-top:3px}
 .row>div{min-width:0}.row>span.num{flex:none;padding-left:6px}.row .tag{display:inline-block;margin-top:2px}
 #hbd,#hbf{padding:0 10px;white-space:nowrap}
-/* fond noir uniforme */
-:root,:root[data-theme],:root:not([data-theme=light]){color-scheme:dark;--bg:#0b0b0b;--card:#161616;--ink:#f5f5f5;--mut:#9a9a9a;--line:#262626;--soft:#222;--neg:#ff6b81;--pos:#5DCAA5}
-html,body{background:#0b0b0b}
-.head{background:#0b0b0b;color:#f5f5f5}
-.card,.acc{box-shadow:none;border:1px solid #1f1f1f}
-.big.n,.fin b.n{color:#ff6b81}.fin b{color:#5DCAA5}
-.center small,.fin,.flows,#note,.hmn div{color:#9a9a9a!important}
-.hb,.hmn button{background:#1f1f1f}
-.tabs button[aria-pressed=true],.seg button[aria-pressed=true]{background:#2e2e2e;box-shadow:none}
-.addacc{border-color:#333}
-#sheet{background:rgba(0,0,0,.75)}
-#menu .pop{border:1px solid #262626}
+/* fonds uniformes au choix (Paramètres) */
+:root,:root[data-theme],:root:not([data-theme=light]){color-scheme:dark;--bg:var(--fbg);--card:var(--fcard);--ink:var(--fink);--mut:var(--fmut);--line:var(--fline);--soft:var(--fsoft);--neg:var(--fneg);--pos:var(--fpos)}
+html{--fbg:#0d1f1a;--fcard:#17302a;--fink:#f3faf7;--fmut:#8fb3a6;--fline:#24423a;--fsoft:#1f3a33;--fsel:#2a4d44;--fneg:#ff7d8f;--fpos:#7ef0d6}
+html[data-fond=noir]{--fbg:#0b0b0b;--fcard:#161616;--fink:#f5f5f5;--fmut:#9a9a9a;--fline:#262626;--fsoft:#222;--fsel:#2e2e2e;--fneg:#ff6b81;--fpos:#5DCAA5}
+html[data-fond=anthracite]{--fbg:#1c1c1e;--fcard:#2c2c2e;--fink:#fff;--fmut:#a1a1a6;--fline:#3a3a3c;--fsoft:#3a3a3c;--fsel:#4a4a4c;--fneg:#ff6b81;--fpos:#5DCAA5}
+html[data-fond=marine]{--fbg:#0a1628;--fcard:#14233a;--fink:#f2f6fb;--fmut:#8ea3bf;--fline:#22334d;--fsoft:#1c2d46;--fsel:#2a3d5a;--fneg:#ff7d8f;--fpos:#5DCAA5}
+html[data-fond=creme]{--fbg:#f6f1e7;--fcard:#fffdf8;--fink:#1d1a14;--fmut:#7a7263;--fline:#e6dccb;--fsoft:#efe8da;--fsel:#fffdf8;--fneg:#d6334a;--fpos:#0F6E56}
+:root[data-fond=creme],:root[data-fond=creme]:not([data-theme=light]){color-scheme:light}
+html,body{background:var(--fbg)}
+.head{background:var(--fbg);color:var(--fink)}
+.card,.acc{box-shadow:none;border:1px solid var(--fline)}
+.big.n,.fin b.n{color:var(--fneg)}.fin b{color:var(--fpos)}
+.center small,.fin,.flows,#note,.hmn div{color:var(--fmut)!important}
+.hb,.hmn button{background:var(--fsoft);color:var(--fink)}
+.tabs button[aria-pressed=true],.seg button[aria-pressed=true]{background:var(--fsel);box-shadow:none}
+.addacc{border-color:var(--fline)}
+#sheet{background:rgba(0,0,0,.6)}
+#menu .pop{border:1px solid var(--fline)}
 .rico{box-shadow:none}
 @media(max-width:430px){.sbc:nth-child(even) .tm{visibility:hidden}.tl .tlc:not(.sel) .tv{visibility:hidden}.tl .tlc:nth-child(even):not(.sel) .tm{visibility:hidden}.bar1 h1{font-size:17px}}
 </style>
@@ -181,6 +187,9 @@ const TYPES=[
  {id:'pea',n:'PEA / bourse',d:'Placement en actions.',ep:1},
  {id:'especes',n:'Espèces',d:'L\'argent liquide sur toi.'}];
 const TY=id=>TYPES.find(t=>t.id===id)||TYPES[0];
+const FONDS=[['sapin','Vert sapin','#0d1f1a'],['noir','Noir','#0b0b0b'],['anthracite','Anthracite','#1c1c1e'],['marine','Bleu marine','#0a1628'],['creme','Crème','#f6f1e7']];
+function applyFond(){const f=(cfg&&cfg.fond)||'sapin',c=(FONDS.find(x=>x[0]===f)||FONDS[0])[2];document.documentElement.dataset.fond=f;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=c;try{localStorage.setItem('flouze-fond',f)}catch(_){}}
+try{const f0=localStorage.getItem('flouze-fond');if(f0)document.documentElement.dataset.fond=f0}catch(_){}
 const DEF_GROUPS=[
  {id:'logement',n:'Logement',c:'#6c63ff',cats:[['loyer','Loyer (RIVP)',1],['edf','Électricité (EDF)',1],['assur','Assurance habitation',1]]},
  {id:'abos',n:'Abonnements',c:'#2ea7e0',cats:[['mobile','Forfait mobile (Free)',1],['box','Box internet (Free)',1],['canal','Canal+',1],['streaming','Streaming & applis',1],['gym','Salle de sport',1],['banque','Banque & cotisation',1]]},
@@ -195,7 +204,7 @@ const DEF_GROUPS=[
  {id:'autre',n:'Autre',c:'#94a3b8',cats:[['divers','Divers',0]]}];
 const CATDEF={};DEF_GROUPS.forEach(g=>g.cats.forEach(([id])=>CATDEF[id]=1));
 let GROUPS=DEF_GROUPS,CAT={};
-function ensure(){if(!Array.isArray(cfg.groups)||!cfg.groups.length)cfg.groups=JSON.parse(JSON.stringify(DEF_GROUPS));GROUPS=cfg.groups;CAT={};GROUPS.forEach(g=>g.cats.forEach(([id,n,f])=>CAT[id]={id,n,f:!!f,g:g.id,c:g.c}));SEUIL=cfg.seuil??150;PD=Math.min(31,Math.max(1,+cfg.payday||1));curM=pOf(today);mEnd=pEnd(curM)}
+function ensure(){if(!Array.isArray(cfg.groups)||!cfg.groups.length)cfg.groups=JSON.parse(JSON.stringify(DEF_GROUPS));GROUPS=cfg.groups;CAT={};GROUPS.forEach(g=>g.cats.forEach(([id,n,f])=>CAT[id]={id,n,f:!!f,g:g.id,c:g.c}));SEUIL=cfg.seuil??150;PD=Math.min(31,Math.max(1,+cfg.payday||1));curM=pOf(today);mEnd=pEnd(curM);applyFond()}
 const REVC=[['salaire','Salaire'],['rembours','Remboursement'],['cadeau_r','Cadeau reçu'],['autre_r','Autre rentrée']];
 const revN=id=>(REVC.find(r=>r[0]===id)||[0,'Rentrée'])[1];
 const $=id=>document.getElementById(id);
@@ -494,6 +503,7 @@ function renderSettings(){
      ${restoreData?`<div style="background:var(--soft);border-radius:16px;padding:12px;margin-top:10px"><b>Restaurer la sauvegarde du ${esc(dShort(restoreData.date||today))} ?</b><p class="mut" style="margin:4px 0 10px">${restoreData.cfg.accounts.length} compte(s). Tout ce qui est dans l'appli sera remplacé par ce fichier.</p><button class="pri" id="rsok" style="width:100%">Oui, restaurer</button><button id="rsno" style="width:100%;margin-top:6px">Annuler</button></div>`:''}
      <p class="mut" style="margin:12px 0 0">Chaque début de mois, l'accueil te rappelle de faire ta sauvegarde en un clic.</p></div>
    ${shareCard()}
+   <div class="card"><h2>Fond de l'appli</h2><div class="chips">${FONDS.map(([id,n,c])=>`<button type="button" class="chip" data-fd="${id}" aria-pressed="${(cfg.fond||'sapin')===id}"><i style="background:${c};border:1px solid var(--mut);width:14px;height:14px"></i>${n}</button>`).join('')}</div></div>
    <div class="card"><h2>Jour de paie</h2><p class="mut" style="margin-top:-4px">Ton mois commence le jour où tu touches ton salaire. Exemple : payé le 26, ton mois de décembre va du 26 novembre au 25 décembre.</p><select id="payday" aria-label="Jour de paie"><option value="1"${PD===1?' selected':''}>Le 1er (mois normal)</option>${Array.from({length:30},(_,i)=>i+2).map(d=>`<option value="${d}"${PD===d?' selected':''}>Le ${d} du mois</option>`).join('')}</select>${PD>1?`<p class="mut" style="margin:8px 0 0">Mois en cours (${esc(mName(curM))}) : du ${esc(dMini(pStart(curM)))} au ${esc(dMini(pEnd(curM)))}.</p>`:''}</div>
    <div class="card"><h2>Alerte fin de mois</h2><p class="mut" style="margin-top:-4px">Préviens-moi quand le compte courant doit finir le mois sous :</p><div class="amt" style="margin:0"><input id="seuil" inputmode="decimal" value="${esc(SEUIL)}" aria-label="Seuil d'alerte" style="font-size:26px;min-height:56px"><span>€</span></div></div>
    <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 style="margin:0">Catégories</h2><button id="gadd" style="min-height:38px;font-size:14px">+ Nouvelle famille</button></div>
@@ -515,6 +525,7 @@ function renderSettings(){
     cfg=d.cfg;months={};for(const k in d.months)months[k]={tx:Array.isArray(d.months[k].tx)?d.months[k].tx:[],skip:Array.isArray(d.months[k].skip)?d.months[k].skip:[]};
     ['accounts','budgets','recur'].forEach(k=>{if(!Array.isArray(cfg[k]))cfg[k]=[]});ensure();mark('cfg');for(const k in months)mark(k);bkMsg='Sauvegarde restaurée.';renderSettings()};
   if($('rsno'))$('rsno').onclick=()=>{restoreData=null;renderSettings()};
+  document.querySelectorAll('[data-fd]').forEach(b=>b.onclick=()=>{cfg.fond=b.dataset.fd;mark('cfg');applyFond();renderSettings()});
   $('payday').onchange=e=>{cfg.payday=+e.target.value;mark('cfg');ensure();materialize();vm=curM;renderSettings();toast(PD>1?'Ton mois commence maintenant le '+PD:'Retour au mois normal')};
   $('seuil').onchange=e=>{const v=parseA(e.target.value);cfg.seuil=v>=0?v:150;ensure();mark('cfg');toast('Alerte : sous '+e0(SEUIL))};
   const v=$('view'),G=id=>cfg.groups.find(g=>g.id===id),C=id=>{for(const g of cfg.groups){const c=g.cats.find(x=>x[0]===id);if(c)return c}};
@@ -665,7 +676,7 @@ function subscribe(){if(unsub){try{unsub()}catch(_){}unsub=null}
 window.addEventListener('hashchange',()=>{tab='ops';vm=curM;openG.clear();focusG=null;showAll=false;route();window.scrollTo(0,0)});
 $('view').innerHTML='<div class="head"><div class="center"><small>Chargement…</small></div></div>';
 // ---------- mise à jour automatique (version web) ----------
-const APP_VERSION='2026-11-26.6';
+const APP_VERSION='2026-11-26.8';
 async function checkUpdate(){if(!/github\.io$/.test(location.hostname))return;
   try{const r=await fetch(location.pathname,{cache:'reload'});const t=await r.text();const m=t.match(/APP_VERSION='([^']+)'/);
     if(m&&m[1]!==APP_VERSION){if($('sheet').classList.contains('on')||$('menu').classList.contains('on')){setTimeout(checkUpdate,30000);return}location.reload()}}catch(_){}}
