@@ -179,7 +179,7 @@ const DEF_GROUPS=[
  {id:'autre',n:'Autre',c:'#94a3b8',cats:[['divers','Divers',0]]}];
 const CATDEF={};DEF_GROUPS.forEach(g=>g.cats.forEach(([id])=>CATDEF[id]=1));
 let GROUPS=DEF_GROUPS,CAT={};
-function ensure(){if(!Array.isArray(cfg.groups)||!cfg.groups.length)cfg.groups=JSON.parse(JSON.stringify(DEF_GROUPS));GROUPS=cfg.groups;CAT={};GROUPS.forEach(g=>g.cats.forEach(([id,n,f])=>CAT[id]={id,n,f:!!f,g:g.id,c:g.c}));SEUIL=cfg.seuil??150}
+function ensure(){if(!Array.isArray(cfg.groups)||!cfg.groups.length)cfg.groups=JSON.parse(JSON.stringify(DEF_GROUPS));GROUPS=cfg.groups;CAT={};GROUPS.forEach(g=>g.cats.forEach(([id,n,f])=>CAT[id]={id,n,f:!!f,g:g.id,c:g.c}));SEUIL=cfg.seuil??150;PD=Math.min(31,Math.max(1,+cfg.payday||1));curM=pOf(today);mEnd=pEnd(curM)}
 const REVC=[['salaire','Salaire'],['rembours','Remboursement'],['cadeau_r','Cadeau reçu'],['autre_r','Autre rentrée']];
 const revN=id=>(REVC.find(r=>r[0]===id)||[0,'Rentrée'])[1];
 const $=id=>document.getElementById(id);
@@ -188,27 +188,33 @@ const eur=(n,d=2)=>(Number(n)||0).toLocaleString('fr-FR',{style:'currency',curre
 const e0=n=>eur(n,0);const nid=()=>Math.random().toString(36).slice(2,10);const pad=n=>String(n).padStart(2,'0');
 const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const addD=(s,n)=>{const[y,m,d]=s.split('-').map(Number);return iso(new Date(y,m-1,d+n))};
-const today=iso(new Date()),curM=today.slice(0,7);
+const today=iso(new Date()),calM=today.slice(0,7);let curM=calM,PD=1;
 const mDays=k=>{const[y,m]=k.split('-').map(Number);return new Date(y,m,0).getDate()};
 const shiftM=(k,d)=>{const[y,m]=k.split('-').map(Number);return iso(new Date(y,m-1+d,1)).slice(0,7)};
 const mName=k=>{const[y,m]=k.split('-').map(Number);return new Date(y,m-1,1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})};
 const dShort=s=>new Date(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8)).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
-const wS=addD(today,-((new Date().getDay()+6)%7)),wE=addD(wS,6),mEnd=curM+'-'+pad(mDays(curM));
+const wS=addD(today,-((new Date().getDay()+6)%7)),wE=addD(wS,6);let mEnd=calM+'-'+pad(mDays(calM));
+// ---------- mois de paie : du jour de paie à la veille de la paie suivante ----------
+const pStart=k=>{const sm=PD>=16?shiftM(k,-1):k;return sm+'-'+pad(Math.min(PD,mDays(sm)))};
+const pEnd=k=>addD(pStart(shiftM(k,1)),-1);
+const pOf=d=>{const k=d.slice(0,7);if(d>=pStart(shiftM(k,1)))return shiftM(k,1);if(d<pStart(k))return shiftM(k,-1);return k};
+const dayN=(a,b)=>Math.round((Date.UTC(+b.slice(0,4),+b.slice(5,7)-1,+b.slice(8))-Date.UTC(+a.slice(0,4),+a.slice(5,7)-1,+a.slice(8)))/864e5)+1;
+const dMini=s=>new Date(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8)).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+function periodTx(k){const s=pStart(k),e=pEnd(k),l=[];[...new Set([s.slice(0,7),e.slice(0,7)])].forEach(cm=>(months[cm]?.tx||[]).forEach(t=>{if(t.d>=s&&t.d<=e)l.push(t)}));return l}
 const parseA=v=>Math.round(parseFloat(String(v).replace(/\s/g,'').replace(',','.'))*100)/100;
 
 let cfg=null,months={},db=null,uid=null,local=false,dirty=new Set(),busy=0,tt,ready=false;
-let tab='dep',vm=curM,openG=new Set(),focusG=null,showAll=false,lastDel=null;
+let tab='ops',vm=curM,openG=new Set(),focusG=null,showAll=false,lastDel=null;
 const defCfg=()=>({accounts:[{id:'principal',name:'Compte principal',type:'courant',init:0,since:today},{id:'epargne',name:'Livret A',type:'livreta',init:0,since:today}],budgets:[],recur:[]});
 const M=k=>months[k]||(months[k]={tx:[],skip:[]});
 const acc=id=>cfg.accounts.find(a=>a.id===id);
 function eachTx(cb){for(const k in months)for(const t of months[k].tx)cb(t,k)}
 const eff=(t,id)=>{const a=+t.a||0;if(t.k==='dep')return t.acc===id?-a:0;if(t.k==='rev')return t.acc===id?a:0;if(t.k==='vir')return(t.acc===id?-a:0)+(t.to===id?a:0);return 0};
 function balance(a){let b=+a.init||0;eachTx(t=>{if(t.d>=a.since&&t.d<=today)b+=eff(t,a.id)});return b}
-const monthAmt=(b,k=curM)=>{const n=mDays(k),fk=b.from?b.from.slice(0,7):'',tk=b.to?b.to.slice(0,7):'';if(fk&&fk>k)return 0;if(tk&&tk<k)return 0;
-  const d1=fk===k?+b.from.slice(8):1,d2=tk===k?+b.to.slice(8):n,days=Math.max(0,d2-d1+1);return b.per==='j'?b.a*days:b.per==='s'?b.a*days/7:(days?+b.a:0)};
+const monthAmt=(b,k=curM)=>{const s=pStart(k),e=pEnd(k),f=b.from&&b.from>s?b.from:s,t=b.to&&b.to<e?b.to:e;if(f>t)return 0;const days=dayN(f,t);return b.per==='j'?b.a*days:b.per==='s'?b.a*days/7:+b.a};
 function catSpent(id,cat,from,to){let s=0;eachTx(t=>{if(t.k==='dep'&&t.acc===id&&t.c===cat&&t.d>=from&&t.d<=to)s+= +t.a});return s}
 function proj(a){let fut=0;eachTx(t=>{if(t.d>today&&t.d<=mEnd&&t.d>=a.since)fut+=eff(t,a.id)});
-  let bud=0;cfg.budgets.filter(b=>b.acc===a.id).forEach(b=>{bud+=Math.max(0,monthAmt(b)-catSpent(a.id,b.cat,curM+'-01',mEnd))});
+  let bud=0;cfg.budgets.filter(b=>b.acc===a.id).forEach(b=>{bud+=Math.max(0,monthAmt(b)-catSpent(a.id,b.cat,pStart(curM),mEnd))});
   const bal=balance(a);return{bal,fut,bud,fin:bal+fut-bud}}
 
 // ---------- icônes ----------
@@ -221,19 +227,20 @@ function icon(t){const ty=TY(t),c=ty.ep?'#10b981':t==='especes'?'#ffb627':'#6c63
   return`<span class="ic" style="background:linear-gradient(135deg,${c}2e,${c}12);color:${c}"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg></span>`}
 
 // ---------- projection dans le temps ----------
-function recOcc(k){if(k<=curM)return[];const mo=months[k]||{tx:[],skip:[]};
-  return cfg.recur.filter(r=>(r.start||'')<=k&&(!r.end||r.end>=k+'-'+pad(Math.min(r.day||1,mDays(k))))&&!mo.skip.includes(r.id)&&!mo.tx.some(t=>t.r===r.id)&&acc(r.acc)&&(!r.to||acc(r.to)))
-   .map(r=>({id:'v-'+r.id+'-'+k,virtual:1,acc:r.acc,to:r.to,k:r.k,a:+r.a,c:r.c,l:r.l||'',d:k+'-'+pad(Math.min(r.day||1,mDays(k))),r:r.id}))}
-const txOfMonth=k=>(months[k]?.tx||[]).concat(recOcc(k));
+function recDates(k){const s=pStart(k),e=pEnd(k),cms=[...new Set([s.slice(0,7),e.slice(0,7)])],out=[];
+  cfg.recur.forEach(r=>cms.forEach(cm=>{const d=cm+'-'+pad(Math.min(r.day||1,mDays(cm)));if(d<s||d>e||(r.start||'')>cm||(r.end&&r.end<d))return;
+    const mo=months[cm]||{tx:[],skip:[]};if(mo.skip.includes(r.id)||mo.tx.some(t=>t.r===r.id)||!acc(r.acc)||(r.to&&!acc(r.to)))return;out.push({r,d,cm})}));return out}
+function recOcc(k){if(k<=curM)return[];return recDates(k).map(({r,d,cm})=>({id:'v-'+r.id+'-'+cm,virtual:1,acc:r.acc,to:r.to,k:r.k,a:+r.a,c:r.c,l:r.l||'',d,r:r.id}))}
+const txOfMonth=k=>periodTx(k).concat(recOcc(k));
 let memo=new Map();
 function flow(a,k){const key=a.id+'|f|'+k;if(memo.has(key))return memo.get(key);
   let rin=0,dout=0,vin=0,vout=0,bud=0;const by={};
   txOfMonth(k).forEach(t=>{if(t.d<a.since)return;const v=+t.a||0;
     if(t.k==='rev'&&t.acc===a.id)rin+=v;else if(t.k==='dep'&&t.acc===a.id){dout+=v;by[t.c]=(by[t.c]||0)+v}else if(t.k==='vir'){if(t.acc===a.id)vout+=v;if(t.to===a.id)vin+=v}});
-  if(k>=curM)cfg.budgets.filter(b=>b.acc===a.id).forEach(b=>{const sp=k===curM?catSpent(a.id,b.cat,curM+'-01',mEnd):(by[b.cat]||0);bud+=Math.max(0,monthAmt(b,k)-sp)});
+  if(k>=curM)cfg.budgets.filter(b=>b.acc===a.id).forEach(b=>{const sp=k===curM?catSpent(a.id,b.cat,pStart(curM),mEnd):(by[b.cat]||0);bud+=Math.max(0,monthAmt(b,k)-sp)});
   const r={rin,dout,vin,vout,bud,by};memo.set(key,r);return r}
 function endBal(a,k){const key=a.id+'|e|'+k;if(memo.has(key))return memo.get(key);let v;
-  if(k<curM){const end=k+'-'+pad(mDays(k));v=+a.init||0;eachTx(t=>{if(t.d>=a.since&&t.d<=end)v+=eff(t,a.id)})}
+  if(k<curM){const end=pEnd(k);v=+a.init||0;eachTx(t=>{if(t.d>=a.since&&t.d<=end)v+=eff(t,a.id)})}
   else if(k===curM)v=proj(a).fin;
   else{const f=flow(a,k);v=endBal(a,shiftM(k,-1))+f.rin+f.vin-f.dout-f.vout-f.bud}
   memo.set(key,v);return v}
@@ -263,7 +270,7 @@ function renderHome(){let tot=0;const cards=cfg.accounts.map(a=>{const p=proj(a)
     return`<button class="acc" data-open="${esc(a.id)}">${icon(a.type)}<div class="t"><b>${esc(a.name)}</b><span class="mut">${esc(ty.n)}</span>${plaf}</div><div class="v"><b class="num ${p.bal<0?'neg':''}">${eur(p.bal)}</b>${ty.ep?'':`<span class="mut num ${warn?'neg':''}">fin du mois ${eur(p.fin,0)}</span>${warn?'<span class="tag" style="background:#ff7a5922;color:var(--neg);margin:0">serré</span>':''}`}</div></button>`}).join('');
   $('view').innerHTML=`<header class="head"><div class="bar1"><span style="width:48px"></span><h1 style="display:flex;align-items:center;justify-content:center;gap:10px"><svg width="44" height="44" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="49" fill="#2c5878"/><path d="M95.60 50.00L98.60 50.00M95.49 53.18L98.48 53.39M95.16 56.35L98.13 56.76M94.60 59.48L97.54 60.10M93.83 62.57L96.72 63.40M92.85 65.60L95.67 66.62M91.66 68.55L94.40 69.77M90.26 71.41L92.91 72.82M88.67 74.16L91.22 75.75M86.89 76.80L89.32 78.57M84.93 79.31L87.23 81.24M82.80 81.68L84.96 83.76M80.51 83.89L82.52 86.12M78.07 85.93L79.92 88.30M75.50 87.80L77.18 90.29M72.80 89.49L74.30 92.09M69.99 90.99L71.30 93.68M67.08 92.28L68.21 95.06M64.09 93.37L65.02 96.22M61.03 94.25L61.76 97.16M57.92 94.91L58.44 97.86M54.77 95.35L55.08 98.33M51.59 95.57L51.70 98.57M48.41 95.57L48.30 98.57M45.23 95.35L44.92 98.33M42.08 94.91L41.56 97.86M38.97 94.25L38.24 97.16M35.91 93.37L34.98 96.22M32.92 92.28L31.79 95.06M30.01 90.99L28.70 93.68M27.20 89.49L25.70 92.09M24.50 87.80L22.82 90.29M21.93 85.93L20.08 88.30M19.49 83.89L17.48 86.12M17.20 81.68L15.04 83.76M15.07 79.31L12.77 81.24M13.11 76.80L10.68 78.57M11.33 74.16L8.78 75.75M9.74 71.41L7.09 72.82M8.34 68.55L5.60 69.77M7.15 65.60L4.33 66.62M6.17 62.57L3.28 63.40M5.40 59.48L2.46 60.10M4.84 56.35L1.87 56.76M4.51 53.18L1.52 53.39M4.40 50.00L1.40 50.00M4.51 46.82L1.52 46.61M4.84 43.65L1.87 43.24M5.40 40.52L2.46 39.90M6.17 37.43L3.28 36.60M7.15 34.40L4.33 33.38M8.34 31.45L5.60 30.23M9.74 28.59L7.09 27.18M11.33 25.84L8.78 24.25M13.11 23.20L10.68 21.43M15.07 20.69L12.77 18.76M17.20 18.32L15.04 16.24M19.49 16.11L17.48 13.88M21.93 14.07L20.08 11.70M24.50 12.20L22.82 9.71M27.20 10.51L25.70 7.91M30.01 9.01L28.70 6.32M32.92 7.72L31.79 4.94M35.91 6.63L34.98 3.78M38.97 5.75L38.24 2.84M42.08 5.09L41.56 2.14M45.23 4.65L44.92 1.67M48.41 4.43L48.30 1.43M51.59 4.43L51.70 1.43M54.77 4.65L55.08 1.67M57.92 5.09L58.44 2.14M61.03 5.75L61.76 2.84M64.09 6.63L65.02 3.78M67.08 7.72L68.21 4.94M69.99 9.01L71.30 6.32M72.80 10.51L74.30 7.91M75.50 12.20L77.18 9.71M78.07 14.07L79.92 11.70M80.51 16.11L82.52 13.88M82.80 18.32L84.96 16.24M84.93 20.69L87.23 18.76M86.89 23.20L89.32 21.43M88.67 25.84L91.22 24.25M90.26 28.59L92.91 27.18M91.66 31.45L94.40 30.23M92.85 34.40L95.67 33.38M93.83 37.43L96.72 36.60M94.60 40.52L97.54 39.90M95.16 43.65L98.13 43.24M95.49 46.82L98.48 46.61" stroke="#8fb3cc" stroke-width="1" fill="none"/><circle cx="50" cy="50" r="45" fill="#163a52"/><path d="M14 36A39 39 0 0 1 40 12" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="2.2" stroke-linecap="round"/><circle cx="50" cy="50" r="41.5" fill="#0f2a3d" stroke="#5e8aa8" stroke-width="0.8"/><g fill="#9cc0d8" fill-opacity="0.7"><circle cx="88.30" cy="50.00" r="0.75"/><circle cx="87.97" cy="55.00" r="0.75"/><circle cx="86.99" cy="59.91" r="0.75"/><circle cx="85.38" cy="64.66" r="0.75"/><circle cx="83.17" cy="69.15" r="0.75"/><circle cx="80.39" cy="73.32" r="0.75"/><circle cx="77.08" cy="77.08" r="0.75"/><circle cx="73.32" cy="80.39" r="0.75"/><circle cx="69.15" cy="83.17" r="0.75"/><circle cx="64.66" cy="85.38" r="0.75"/><circle cx="59.91" cy="86.99" r="0.75"/><circle cx="55.00" cy="87.97" r="0.75"/><circle cx="50.00" cy="88.30" r="0.75"/><circle cx="45.00" cy="87.97" r="0.75"/><circle cx="40.09" cy="86.99" r="0.75"/><circle cx="35.34" cy="85.38" r="0.75"/><circle cx="30.85" cy="83.17" r="0.75"/><circle cx="26.68" cy="80.39" r="0.75"/><circle cx="22.92" cy="77.08" r="0.75"/><circle cx="19.61" cy="73.32" r="0.75"/><circle cx="16.83" cy="69.15" r="0.75"/><circle cx="14.62" cy="64.66" r="0.75"/><circle cx="13.01" cy="59.91" r="0.75"/><circle cx="12.03" cy="55.00" r="0.75"/><circle cx="11.70" cy="50.00" r="0.75"/><circle cx="12.03" cy="45.00" r="0.75"/><circle cx="13.01" cy="40.09" r="0.75"/><circle cx="14.62" cy="35.34" r="0.75"/><circle cx="16.83" cy="30.85" r="0.75"/><circle cx="19.61" cy="26.68" r="0.75"/><circle cx="22.92" cy="22.92" r="0.75"/><circle cx="26.68" cy="19.61" r="0.75"/><circle cx="30.85" cy="16.83" r="0.75"/><circle cx="35.34" cy="14.62" r="0.75"/><circle cx="40.09" cy="13.01" r="0.75"/><circle cx="45.00" cy="12.03" r="0.75"/><circle cx="50.00" cy="11.70" r="0.75"/><circle cx="55.00" cy="12.03" r="0.75"/><circle cx="59.91" cy="13.01" r="0.75"/><circle cx="64.66" cy="14.62" r="0.75"/><circle cx="69.15" cy="16.83" r="0.75"/><circle cx="73.32" cy="19.61" r="0.75"/><circle cx="77.08" cy="22.92" r="0.75"/><circle cx="80.39" cy="26.68" r="0.75"/><circle cx="83.17" cy="30.85" r="0.75"/><circle cx="85.38" cy="35.34" r="0.75"/><circle cx="86.99" cy="40.09" r="0.75"/><circle cx="87.97" cy="45.00" r="0.75"/></g><circle cx="50" cy="50" r="35" fill="#0d2536" stroke="#5e8aa8" stroke-opacity="0.6" stroke-width="0.6"/><circle cx="50" cy="50" r="31" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="0.6"/><polygon points="27.00,46.40 27.65,48.11 29.47,48.20 28.05,49.34 28.53,51.10 27.00,50.10 25.47,51.10 25.95,49.34 24.53,48.20 26.35,48.11" fill="#e8c77a"/><polygon points="73.00,46.40 73.65,48.11 75.47,48.20 74.05,49.34 74.53,51.10 73.00,50.10 71.47,51.10 71.95,49.34 70.53,48.20 72.35,48.11" fill="#e8c77a"/><path d="M43 26H59M43 26V60M43 42H56" transform="translate(0.9 1.4)" fill="none" stroke="#04121c" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M43 26H59M43 26V60M43 42H56" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M43 26H59M43 26V60M43 42H56" transform="translate(-0.6 -0.8)" fill="none" stroke="#ffffff" stroke-opacity="0.0" stroke-width="2"/></svg>Flouze</h1><button class="hb" id="gear" aria-label="Paramètres" style="padding:0;width:48px">${gearSvg}</button></div>
    <div class="center"><small>Total de mes comptes</small><div class="big num ${tot<0?'n':''}">${eur(tot)}</div><div id="note"></div></div></header>
-   <main class="app"><div class="up">${backupBanner()}${cards}${savingsChart()}${autoList()}<button class="addacc" id="addacc">+ Ajouter un compte</button></div></main>`;
+   <main class="app"><div class="up">${backupBanner()}${cards}<button class="addacc" id="addacc">+ Ajouter un compte</button></div></main>`;
   document.querySelectorAll('[data-rv]').forEach(b=>b.onclick=()=>sheetRec(b.dataset.rv,null));
   $('addacc').onclick=()=>sheetAcc(null);document.querySelectorAll('[data-ss]').forEach(b=>b.onclick=()=>{sSel=+b.dataset.ss;const y=window.scrollY;route();window.scrollTo(0,y)});$('gear').onclick=()=>{location.hash='parametres'};if($('hbd')){$('hbd').onclick=driveBackup;$('hbf').onclick=downloadBackup}
   document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{location.hash='compte-'+b.dataset.open});note()}
@@ -281,7 +288,7 @@ function savingsChart(){const eps=cfg.accounts.filter(a=>TY(a.type).ep);if(!eps.
 function autoList(){const rs=cfg.recur.filter(r=>r.k==='vir'&&acc(r.acc)&&acc(r.to));if(!rs.length)return'';
   return`<div class="card"><h2>Virements automatiques</h2>${rs.map(r=>`<button class="row" data-rv="${esc(r.id)}"><i class="dot" style="background:#5eead4"></i><div>${esc(acc(r.acc).name)} → ${esc(acc(r.to).name)}<div class="mut">le ${esc(r.day)} de chaque mois</div></div><span class="num">${eur(r.a)}</span></button>`).join('')}</div>`}
 
-function timeline(a){const ks=[],ep=TY(a.type).ep;for(let i=ep?-1:-3;i<=(ep?12:6);i++)ks.push(shiftM(curM,i));const sm=(a.since||today).slice(0,7);const vals=ks.map(k=>k<sm?null:endBal(a,k));const mx=Math.max(1,...vals.filter(v=>v!=null).map(Math.abs));const hasNeg=vals.some(v=>v<0);
+function timeline(a){const ks=[],ep=TY(a.type).ep;for(let i=ep?-1:-3;i<=(ep?12:6);i++)ks.push(shiftM(curM,i));const sm=pOf(a.since||today);const vals=ks.map(k=>k<sm?null:endBal(a,k));const mx=Math.max(1,...vals.filter(v=>v!=null).map(Math.abs));const hasNeg=vals.some(v=>v<0);
   return`<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h2>Mon argent dans le temps</h2><span class="mut">solde en fin de mois</span></div>
    <div class="tl" style="--n:${ks.length}">${ks.map((k,i)=>{const v=vals[i],fut=k>curM;if(v==null)return`<button class="tlc" disabled aria-label="${esc(mName(k))} : avant l'ouverture"><span class="tv mut">–</span><span class="tb"></span><span class="tm">${esc(new Date(+k.slice(0,4),+k.slice(5)-1,1).toLocaleDateString('fr-FR',{month:'short'}).replace('.',''))}</span></button>`;const hgt=Math.max(3,Math.abs(v)/mx*100);
      return`<button class="tlc ${k===vm?'sel':''}" data-vm="${k}" aria-label="${esc(mName(k))} : ${esc(eur(v))}"><span class="tv num ${v<0?'neg':''}">${kfmt(v)}</span><span class="tb" style="${hasNeg?'':''}"><i style="height:${hgt}%;background:${v<0?'var(--neg)':fut?'repeating-linear-gradient(135deg,#14b8a6 0 6px,#5eead4 6px 12px)':'#14b8a6'}"></i></span><span class="tm">${esc(new Date(+k.slice(0,4),+k.slice(5)-1,1).toLocaleDateString('fr-FR',{month:'short'}).replace('.',''))}</span></button>`}).join('')}</div>
@@ -290,18 +297,17 @@ function timeline(a){const ks=[],ep=TY(a.type).ep;for(let i=ep?-1:-3;i<=(ep?12:6
 function renderAcc(a){const p=proj(a),ty=TY(a.type);
   const upcoming=[];eachTx(t=>{if((t.acc===a.id||t.to===a.id)&&t.d>today&&t.d<=addD(today,31))upcoming.push(t)});upcoming.sort((x,y)=>x.d.localeCompare(y.d));
   const plaf=ty.p?`<div style="max-width:260px;margin:12px auto 0"><div class="minibar" style="background:rgba(255,255,255,.15)"><i style="width:${Math.min(100,Math.max(0,p.bal)/ty.p*100)}%;background:#5eead4"></i></div><span style="font-size:13px;color:#b9d3df">Plafond ${esc(ty.n)} : ${e0(ty.p)}</span></div>`:'';
-  const end=vm===curM?p.fin:endBal(a,vm),endLab=vm===curM?'Prévu à la fin du mois':vm>curM?'Prévu à la fin de '+mName(vm):'À la fin de '+mName(vm);
+  const end=vm===curM?p.fin:endBal(a,vm),endLab=vm===curM?(PD>1?'Prévu avant la prochaine paie':'Prévu à la fin du mois'):vm>curM?'Prévu à la fin de '+mName(vm):'À la fin de '+mName(vm);
   const top=`<small>Solde actuel</small><div class="big num ${p.bal<0?'n':''}" id="bal" style="cursor:pointer" title="Corriger le solde">${eur(p.bal)}</div>${ty.ep?plaf:''}
     <div class="fin">${esc(endLab)}<b class="num ${end<0?'n':''}">${eur(end)}</b></div>`;
   $('view').innerHTML=`<header class="head"><div class="bar1"><button class="hb" id="back" aria-label="Retour aux comptes">‹ Comptes</button><h1>${esc(a.name)}</h1><button class="plus" id="plus" aria-label="Ajouter">+</button></div>
-   <div class="hmn"><button data-mv="-1" aria-label="Mois précédent">‹</button><b>${esc(mName(vm))}</b><button data-mv="1" aria-label="Mois suivant">›</button>${vm!==curM?'<button class="today" data-today>Aujourd\'hui</button>':''}</div>
+   <div class="hmn"><button data-mv="-1" aria-label="Mois précédent">‹</button><b>${esc(mName(vm))}</b><button data-mv="1" aria-label="Mois suivant">›</button>${vm!==curM?'<button class="today" data-today>Aujourd\'hui</button>':''}${PD>1?`<div style="width:100%;text-align:center;font-size:13px;color:#b9d3df">du ${esc(dMini(pStart(vm)))} au ${esc(dMini(pEnd(vm)))}</div>`:''}</div>
    <div class="center" style="margin-top:12px">${top}<div id="note"></div></div></header>
    <main class="app"><div class="up">
    <div id="bstrip">${budStrip(a)}</div>${vm===curM?adviceCard(a,p):''}
-   <div class="tabs" role="group"><button data-t="dep" aria-pressed="${tab!=='ops'}">Dépenses</button><button data-t="ops" aria-pressed="${tab==='ops'}">Opérations</button></div>
+   <div class="tabs" role="group"><button data-t="ops" aria-pressed="${tab!=='dep'}">Opérations</button><button data-t="dep" aria-pressed="${tab==='dep'}">Graphiques</button></div>
    <div class="card" id="tabc"></div>
-   ${vm===curM&&upcoming.length?`<div class="card"><h2>À venir</h2>${upcoming.slice(0,6).map(t=>opRow(t,a)).join('')}</div>`:''}
-   ${timeline(a)}</div></main>`;
+   ${tab==='dep'?timeline(a):''}</div></main>`;
   $('back').onclick=()=>{location.hash='comptes'};$('plus').onclick=()=>openMenu(a);if($('bal'))$('bal').onclick=()=>sheetAcc(a);
   if($('cover'))$('cover').onclick=e=>sheetTx(acc(e.target.dataset.from),'dep',null,{a:e.target.dataset.a,to:a.id});
   const v=$('view');
@@ -309,8 +315,8 @@ function renderAcc(a){const p=proj(a),ty=TY(a.type);
   v.querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>{vm=b.dataset.vm;focusG=null;renderAcc(a)});
   const td=v.querySelector('[data-today]');if(td)td.onclick=()=>{vm=curM;renderAcc(a)};
   v.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;renderAcc(a)});
-  v.querySelectorAll('.card:not(#tabc) [data-op]').forEach(b=>b.onclick=()=>openOp(b.dataset.op,a));
-  const c=$('tabc');c.innerHTML=tab==='ops'?tabOps(a):tabDep(a);
+  v.querySelectorAll('.card:not(#tabc):not(#opsc) [data-op]').forEach(b=>b.onclick=()=>openOp(b.dataset.op,a));
+  const c=$('tabc');c.innerHTML=tab==='dep'?tabDep(a):opsList(a);
   $('bstrip').onclick=e=>{const bu=e.target.closest('[data-bud]');if(bu){sheetBud(a,cfg.budgets.find(b=>b.id===bu.dataset.bud));return}if(e.target.closest('#newbud'))sheetBud(a,null)};
   c.onclick=e=>{const g=e.target.closest('[data-g]');if(g){const id=g.dataset.g;if(g.closest('svg'))focusG=focusG===id?null:id;else{openG.has(id)?openG.delete(id):openG.add(id);focusG=openG.has(id)?id:null}renderAcc(a);return}
     const op=e.target.closest('[data-op]');if(op){openOp(op.dataset.op,a);return}
@@ -341,9 +347,9 @@ function tabDep(a){const fut=vm>curM;const byC={},plan={};let tot=0,ptot=0;
   return`<div class="mut" style="text-align:center;margin-bottom:2px">Toutes les dépenses de ${esc(mName(vm))}${ptot?' · dont '+eur(ptot,0)+' à venir':''}${pAny?`<br><span style="font-size:12px">↑ ↓ = par rapport à ${esc(mName(pk).split(' ')[0])} (${eur(Object.values(pG).reduce((x,y)=>x+y,0),0)} au total)</span>`:''}</div>
    <svg class="pie ${focusG&&byG[focusG]?'f':''}" viewBox="-110 -110 220 220" role="img" aria-label="Camembert des dépenses par famille">${svg}</svg>
    ${list||`<div class="empty">Aucune dépense ce mois-ci.<br><button id="newdep" style="margin-top:10px">+ Nouvelle dépense</button></div>`}`}
-function budStrip(a){const bs=cfg.budgets.filter(b=>b.acc===a.id);const k=vm,isCur=k===curM,kEnd=k+'-'+pad(mDays(k));
+function budStrip(a){const bs=cfg.budgets.filter(b=>b.acc===a.id);const k=vm,isCur=k===curM,kEnd=pEnd(k);
   const cards=bs.map(b=>{const c=CAT[b.cat]||{n:'?',c:'#999'},mA=monthAmt(b,k),ref=isCur?today:kEnd;
-    if((b.from&&b.from>ref)||(b.to&&b.to<(isCur?today:k+'-01')))return`<button class="bc" data-bud="${esc(b.id)}" style="--c:${c.c};opacity:.6"><span class="bn"><i class="dot" style="background:${c.c}"></i>${esc(c.n)}</span><span class="br num" style="font-size:18px">${e0(b.a)} / ${b.per==='j'?'jour':b.per==='s'?'sem.':'mois'}</span><span class="mut" style="font-size:12px">${b.from&&b.from>ref?'Commence le '+esc(dShort(b.from)):'Terminé le '+esc(dShort(b.to))}</span></button>`;const spentM=txOfMonth(k).reduce((s,t)=>s+(t.k==='dep'&&t.acc===a.id&&t.c===b.cat?+t.a:0),0);
+    if((b.from&&b.from>ref)||(b.to&&b.to<(isCur?today:pStart(k))))return`<button class="bc" data-bud="${esc(b.id)}" style="--c:${c.c};opacity:.6"><span class="bn"><i class="dot" style="background:${c.c}"></i>${esc(c.n)}</span><span class="br num" style="font-size:18px">${e0(b.a)} / ${b.per==='j'?'jour':b.per==='s'?'sem.':'mois'}</span><span class="mut" style="font-size:12px">${b.from&&b.from>ref?'Commence le '+esc(dShort(b.from)):'Terminé le '+esc(dShort(b.to))}</span></button>`;const spentM=txOfMonth(k).reduce((s,t)=>s+(t.k==='dep'&&t.acc===a.id&&t.c===b.cat?+t.a:0),0);
     let lim=mA,sp=spentM,per=isCur?'ce mois':'en '+mName(k).split(' ')[0];
     if(isCur&&b.per==='s'){lim=b.a*Math.min(7,Math.max(0,(new Date(b.to&&b.to<wE?b.to:wE)-new Date(b.from&&b.from>wS?b.from:wS))/864e5+1))/7;sp=catSpent(a.id,b.cat,wS,wE);per='cette semaine'}else if(isCur&&b.per==='j'){lim=b.a;sp=catSpent(a.id,b.cat,today,today);per='aujourd\'hui'}
     const left=lim-sp,over=left<0,pc=lim?Math.min(100,sp/lim*100):0;
@@ -355,8 +361,8 @@ function budStrip(a){const bs=cfg.budgets.filter(b=>b.acc===a.id);const k=vm,isC
    ${bs.length?`<div class="bgrid">${cards}</div>`:'<div class="empty" style="padding:8px">Crée un budget (ex. Courses : 150 € par semaine) pour voir ici ce qu\'il te reste.</div>'}</div>`}
 function tabBud(a){const bs=cfg.budgets.filter(b=>b.acc===a.id);
   if(!bs.length)return`<div class="empty">Pas encore de budget.<br>Ex. Courses : 150 € par semaine.<br><button class="pri" id="newbud" style="margin-top:12px">+ Nouveau budget</button></div>`;
-  const k=vm,kEnd=k+'-'+pad(mDays(k)),isCur=k===curM;
-  return(isCur?'':`<div class="mut" style="text-align:center;margin-bottom:6px">${esc(mName(k))}</div>`)+bs.map(b=>{const c=CAT[b.cat]||{n:'?',c:'#999'},mA=monthAmt(b,k),mS=catSpent(a.id,b.cat,k+'-01',kEnd);
+  const k=vm,kEnd=pEnd(k),isCur=k===curM;
+  return(isCur?'':`<div class="mut" style="text-align:center;margin-bottom:6px">${esc(mName(k))}</div>`)+bs.map(b=>{const c=CAT[b.cat]||{n:'?',c:'#999'},mA=monthAmt(b,k),mS=catSpent(a.id,b.cat,pStart(k),kEnd);
     const [pf,pt,pl]=!isCur?[null,null,null]:b.per==='j'?[today,today,'Aujourd\'hui']:b.per==='s'?[wS,wE,'Cette semaine']:[null,null,null];
     const ps=pf?catSpent(a.id,b.cat,pf,pt):0;const per=b.per==='j'?'jour':b.per==='s'?'semaine':'mois';
     return`<button class="row" data-bud="${esc(b.id)}" style="display:block"><div class="num" style="display:flex;justify-content:space-between;gap:10px"><b><i class="dot" style="display:inline-block;background:${c.c}"></i> ${esc(c.n)}</b><span class="mut">${e0(b.a)} / ${per}</span></div>
@@ -366,6 +372,15 @@ function tabOps(a){const l=txOfMonth(vm).filter(t=>(t.acc===a.id||t.to===a.id)&&
   const sh=showAll?l:l.slice(0,12);
   return`<div class="mut" style="text-align:center;margin-bottom:6px">${esc(mName(vm))}</div>
   ${l.length?sh.map(t=>opRow(t,a)).join(''):'<div class="empty">Aucune opération.</div>'}${l.length>12?`<button id="all" style="width:100%;margin-top:8px">${showAll?'Voir moins':'Tout voir ('+l.length+')'}</button>`:''}`}
+
+function opsList(a){const l=txOfMonth(vm).filter(t=>(t.acc===a.id||t.to===a.id)&&t.d>=a.since).sort((x,y)=>y.d.localeCompare(x.d));
+  const isF=t=>t.virtual||t.d>today,fut=l.filter(isF),past=l.filter(t=>!isF(t));
+  const sgn=t=>(t.k==='dep'||(t.k==='vir'&&t.acc===a.id))?-(+t.a):+t.a,sum=ts=>ts.reduce((s,t)=>s+sgn(t),0);
+  const head=(txt,ts)=>{const s=sum(ts);return`<div style="display:flex;justify-content:space-between;gap:10px;margin:12px 0 0;font-size:14px;font-weight:600;color:var(--mut)"><span>${txt} · ${ts.length}</span><span class="num ${s<0?'':'pos'}">${s<0?'−':'+'} ${eur(Math.abs(s))}</span></div>`};
+  if(!l.length)return`<h2>Opérations</h2><div class="empty">Aucune opération en ${esc(mName(vm))}.<br><button id="newdep" style="margin-top:10px">+ Nouvelle dépense</button></div>`;
+  return`<h2 style="margin-bottom:0">Opérations</h2><div class="mut">À venir en haut, puis les dernières passées</div>
+   ${fut.length?head('À venir',fut)+fut.map(t=>opRow(t,a)).join(''):''}
+   ${past.length?head('Déjà passées',past)+(showAll?past:past.slice(0,5)).map(t=>opRow(t,a)).join('')+(past.length>5?`<button id="all" style="width:100%;margin-top:8px">${showAll?'Voir moins':'Tout voir ('+past.length+')'}</button>`:''):''}`}
 
 // ---------- menu + ----------
 function openMenu(a){
@@ -422,13 +437,14 @@ function sheetTx(a,kind,tx,pre){const others=cfg.accounts.filter(x=>x.id!==a.id)
       if(!t.to)delete t.to;if(!t.c)delete t.c;
       if(st.rec){let r=t.r&&cfg.recur.find(x=>x.id===t.r);if(!r){r={id:nid(),start:k};cfg.recur.push(r);t.r=r.id}Object.assign(r,{acc:t.acc,k:t.k,a:amt,c:t.c||null,to:t.to||null,l:t.l,day,end:st.end||''});mark('cfg')}
       else if(t.r){cfg.recur=cfg.recur.filter(x=>x.id!==t.r);delete t.r;mark('cfg')}
-      M(k).tx.push(t);mark(k);closeSheet();route();toast(tx?'Modifié':isV?`${eur(amt)} → ${acc(t.to).name}`:`${eur(amt)} ${t.d>today?'prévus le '+dShort(t.d):'ajoutés'}`,tx?null:t.id)};
+      M(k).tx.push(t);mark(k);let pdSet=false;if(st.rec&&t.k==='rev'&&t.c==='salaire'&&cfg.payday==null&&day>1){cfg.payday=day;mark('cfg');ensure();materialize();vm=curM;pdSet=true}
+      closeSheet();route();if(pdSet){toast('Ton mois commence maintenant le '+day+', jour de ta paie');return}toast(tx?'Modifié':isV?`${eur(amt)} → ${acc(t.to).name}`:`${eur(amt)} ${t.d>today?'prévus le '+dShort(t.d):'ajoutés'}`,tx?null:t.id)};
     if(tx)$('rm').onclick=()=>{delTx(tx.id);closeSheet();route()};
     if($('rmall'))$('rmall').onclick=()=>{stopRec(tx.r);delTx(tx.id);closeSheet();route();toast('Supprimé, et ne reviendra plus')}};
   $('sheet').classList.add('on');draw();if(!tx)setTimeout(()=>$('sa')?.focus(),60)}
-function stopRec(id){cfg.recur=cfg.recur.filter(r=>r.id!==id);for(const k in months){if(k>curM){const before=months[k].tx.length;months[k].tx=months[k].tx.filter(t=>!(t.r===id&&t.d>today));if(months[k].tx.length!==before)mark(k)}}mark('cfg')}
+function stopRec(id){cfg.recur=cfg.recur.filter(r=>r.id!==id);for(const k in months){const before=months[k].tx.length;months[k].tx=months[k].tx.filter(t=>!(t.r===id&&t.d>today));if(months[k].tx.length!==before)mark(k)}mark('cfg')}
 function sheetRec(id,k){const r=cfg.recur.find(x=>x.id===id);if(!r)return;const from=acc(r.acc),lab=r.k==='vir'?`${from?.name||'?'} → ${acc(r.to)?.name||'?'}`:(r.l||(r.k==='rev'?revN(r.c):CAT[r.c]?.n||'Opération'));
-  const inst=months[curM]?.tx.find(t=>t.r===id);
+  const inst=periodTx(curM).find(t=>t.r===id);
   openSheet(`${shHead(r.k==='vir'?'Virement automatique':'Opération répétée')}<p style="margin:0"><b>${esc(lab)}</b></p><p class="mut" style="margin:2px 0 14px">${eur(r.a)} le ${esc(r.day)} de chaque mois${r.end?' jusqu\'au '+esc(dShort(r.end)):''}</p>
    ${k?`<button id="skip" style="width:100%;margin-bottom:8px">Supprimer seulement en ${esc(mName(k))}</button>`:''}
    ${inst?`<button id="edit" style="width:100%;margin-bottom:8px">Modifier (${esc(mName(curM))})</button>`:''}
@@ -459,6 +475,7 @@ function renderSettings(){
      <p class="mut" id="bkmsg" style="text-align:center;margin:10px 0 0">${esc(bkMsg)}</p>
      ${restoreData?`<div style="background:var(--soft);border-radius:16px;padding:12px;margin-top:10px"><b>Restaurer la sauvegarde du ${esc(dShort(restoreData.date||today))} ?</b><p class="mut" style="margin:4px 0 10px">${restoreData.cfg.accounts.length} compte(s). Tout ce qui est dans l'appli sera remplacé par ce fichier.</p><button class="pri" id="rsok" style="width:100%">Oui, restaurer</button><button id="rsno" style="width:100%;margin-top:6px">Annuler</button></div>`:''}
      <p class="mut" style="margin:12px 0 0">Chaque début de mois, l'accueil te rappelle de faire ta sauvegarde en un clic.</p></div>
+   <div class="card"><h2>Jour de paie</h2><p class="mut" style="margin-top:-4px">Ton mois commence le jour où tu touches ton salaire. Exemple : payé le 26, ton mois de décembre va du 26 novembre au 25 décembre.</p><select id="payday" aria-label="Jour de paie"><option value="1"${PD===1?' selected':''}>Le 1er (mois normal)</option>${Array.from({length:30},(_,i)=>i+2).map(d=>`<option value="${d}"${PD===d?' selected':''}>Le ${d} du mois</option>`).join('')}</select>${PD>1?`<p class="mut" style="margin:8px 0 0">Mois en cours (${esc(mName(curM))}) : du ${esc(dMini(pStart(curM)))} au ${esc(dMini(pEnd(curM)))}.</p>`:''}</div>
    <div class="card"><h2>Alerte fin de mois</h2><p class="mut" style="margin-top:-4px">Préviens-moi quand le compte courant doit finir le mois sous :</p><div class="amt" style="margin:0"><input id="seuil" inputmode="decimal" value="${esc(SEUIL)}" aria-label="Seuil d'alerte" style="font-size:26px;min-height:56px"><span>€</span></div></div>
    <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 style="margin:0">Catégories</h2><button id="gadd" style="min-height:38px;font-size:14px">+ Nouvelle famille</button></div>
      <p class="mut">Renomme, change fixe ou variable, ajoute ou supprime. Une catégorie déjà utilisée ne peut pas être supprimée.</p><p class="mut neg" id="cmsg"></p>${groups}
@@ -478,6 +495,7 @@ function renderSettings(){
     cfg=d.cfg;months={};for(const k in d.months)months[k]={tx:Array.isArray(d.months[k].tx)?d.months[k].tx:[],skip:Array.isArray(d.months[k].skip)?d.months[k].skip:[]};
     ['accounts','budgets','recur'].forEach(k=>{if(!Array.isArray(cfg[k]))cfg[k]=[]});ensure();mark('cfg');for(const k in months)mark(k);bkMsg='Sauvegarde restaurée.';renderSettings()};
   if($('rsno'))$('rsno').onclick=()=>{restoreData=null;renderSettings()};
+  $('payday').onchange=e=>{cfg.payday=+e.target.value;mark('cfg');ensure();materialize();vm=curM;renderSettings();toast(PD>1?'Ton mois commence maintenant le '+PD:'Retour au mois normal')};
   $('seuil').onchange=e=>{const v=parseA(e.target.value);cfg.seuil=v>=0?v:150;ensure();mark('cfg');toast('Alerte : sous '+e0(SEUIL))};
   const v=$('view'),G=id=>cfg.groups.find(g=>g.id===id),C=id=>{for(const g of cfg.groups){const c=g.cats.find(x=>x[0]===id);if(c)return c}};
   v.querySelectorAll('[data-gn]').forEach(i=>i.onchange=()=>{const n=i.value.trim();if(n){G(i.dataset.gn).n=n.slice(0,40);ensure();mark('cfg')}});
@@ -502,24 +520,24 @@ async function driveBackup(){const show=m=>{bkMsg=m;if(location.hash==='#paramet
   try{await mcp.callTool('Google Drive','create_file',{title:`Flouze – sauvegarde ${today}.json`,textContent:backupData(),contentMimeType:'application/json',disableConversionToGoogleType:true});
     cfg.lastBackup=today;mark('cfg');show('Sauvegarde enregistrée dans ton Google Drive.')}
   catch(e){const c=e&&e.code;show(c==='server_not_connected'?'Google Drive n\'est pas connecté : ajoute-le dans claude.ai, Paramètres → Connecteurs.':c==='needs_reauth'?'Reconnecte Google Drive dans claude.ai, Paramètres → Connecteurs.':c==='approval_required'||c==='not_in_manifest'?'Il faut autoriser l\'appli à utiliser Google Drive (une fenêtre te le demande sur claude.ai).':c==='server_unavailable'||c==='upstream_error'?'Google Drive n\'a pas répondu. Vérifie dans ton Drive avant de réessayer.':'Sauvegarde impossible : '+(e&&e.message||'erreur'))}}
-function backupBanner(){let any=false;eachTx(()=>{any=true});if(!any||(cfg.lastBackup||'').slice(0,7)>=curM)return'';
-  return`<div class="card" style="border:2px solid #14b8a6"><h2>Sauvegarde de ${esc(mName(curM).split(' ')[0])}</h2><p class="mut" style="margin-top:-4px">Garde une copie de tes comptes au cas où.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="pri" id="hbd">Google Drive</button><button id="hbf">Télécharger</button></div></div>`}
+function backupBanner(){let any=false;eachTx(()=>{any=true});if(!any||(cfg.lastBackup||'').slice(0,7)>=calM)return'';
+  return`<div class="card" style="border:2px solid #14b8a6"><h2>Sauvegarde de ${esc(mName(calM).split(' ')[0])}</h2><p class="mut" style="margin-top:-4px">Garde une copie de tes comptes au cas où.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="pri" id="hbd">Google Drive</button><button id="hbf">Télécharger</button></div></div>`}
 
 // ---------- conseils fin de mois ----------
 let SEUIL=150;
-function avg3(id,cat,grp){let s=0,n=0;for(let i=1;i<=3;i++){const k=shiftM(curM,-i);const mo=months[k];if(!mo||!mo.tx.some(t=>t.acc===id))continue;n++;
-  mo.tx.forEach(t=>{if(t.k==='dep'&&t.acc===id&&(cat?t.c===cat:CAT[t.c]?.g===grp))s+= +t.a})}return n?s/n:null}
-function active(a){let n=false;eachTx(t=>{if(!n&&(t.acc===a.id||t.to===a.id)&&t.d.slice(0,7)===curM)n=true});return n||+a.init!==0}
+function avg3(id,cat,grp){let s=0,n=0;for(let i=1;i<=3;i++){const ptx=periodTx(shiftM(curM,-i));if(!ptx.some(t=>t.acc===id))continue;n++;
+  ptx.forEach(t=>{if(t.k==='dep'&&t.acc===id&&(cat?t.c===cat:CAT[t.c]?.g===grp))s+= +t.a})}return n?s/n:null}
+function active(a){let n=false;eachTx(t=>{if(!n&&(t.acc===a.id||t.to===a.id)&&t.d>=pStart(curM)&&t.d<=mEnd)n=true});return n||+a.init!==0}
 function advice(a,p){if(TY(a.type).ep||p.fin>=SEUIL||!active(a))return null;const tips=[],need=Math.ceil(SEUIL-p.fin);
-  cfg.budgets.filter(b=>b.acc===a.id).forEach(b=>{const sp=catSpent(a.id,b.cat,curM+'-01',mEnd),mA=monthAmt(b);if(sp>mA)tips.push(`<b>${esc(CAT[b.cat]?.n)}</b> : déjà ${eur(sp-mA)} au-dessus du budget du mois.`);else if(b.per!=='m'){const[f,t2]=b.per==='j'?[today,today]:[wS,wE],ws=catSpent(a.id,b.cat,f,t2);if(ws>b.a)tips.push(`<b>${esc(CAT[b.cat]?.n)}</b> : ${eur(ws,0)} ${b.per==='j'?'aujourd\'hui':'cette semaine'} pour un budget de ${e0(b.a)}. Essaie de compenser ${b.per==='j'?'demain':'la semaine prochaine'}.`)}});
-  const byG={};(months[curM]?.tx||[]).forEach(t=>{if(t.k==='dep'&&t.acc===a.id&&t.d<=today){const g=CAT[t.c]?.g||'autre';byG[g]=(byG[g]||0)+ +t.a}});
+  cfg.budgets.filter(b=>b.acc===a.id).forEach(b=>{const sp=catSpent(a.id,b.cat,pStart(curM),mEnd),mA=monthAmt(b);if(sp>mA)tips.push(`<b>${esc(CAT[b.cat]?.n)}</b> : déjà ${eur(sp-mA)} au-dessus du budget du mois.`);else if(b.per!=='m'){const[f,t2]=b.per==='j'?[today,today]:[wS,wE],ws=catSpent(a.id,b.cat,f,t2);if(ws>b.a)tips.push(`<b>${esc(CAT[b.cat]?.n)}</b> : ${eur(ws,0)} ${b.per==='j'?'aujourd\'hui':'cette semaine'} pour un budget de ${e0(b.a)}. Essaie de compenser ${b.per==='j'?'demain':'la semaine prochaine'}.`)}});
+  const byG={};periodTx(curM).forEach(t=>{if(t.k==='dep'&&t.acc===a.id&&t.d<=today){const g=CAT[t.c]?.g||'autre';byG[g]=(byG[g]||0)+ +t.a}});
   GROUPS.forEach(g=>{if(!byG[g.id]||g.cats.every(c=>c[2]))return;const av=avg3(a.id,null,g.id);if(av&&byG[g.id]>av*1.15&&byG[g.id]-av>15)tips.push(`<b>${esc(g.n)}</b> : ${eur(byG[g.id],0)} ce mois contre ${eur(av,0)} d'habitude.`)});
-  if(p.bud>0){const big=cfg.budgets.filter(b=>b.acc===a.id).map(b=>({b,r:Math.max(0,monthAmt(b)-catSpent(a.id,b.cat,curM+'-01',mEnd))})).sort((x,y)=>y.r-x.r)[0];
+  if(p.bud>0){const big=cfg.budgets.filter(b=>b.acc===a.id).map(b=>({b,r:Math.max(0,monthAmt(b)-catSpent(a.id,b.cat,pStart(curM),mEnd))})).sort((x,y)=>y.r-x.r)[0];
     if(big&&big.r>0)tips.push(`Il reste ${eur(big.r,0)} prévus pour <b>${esc(CAT[big.b.cat]?.n)}</b> : dépenser 20 % de moins te fait gagner ${eur(big.r*.2,0)}.`)}
   const varG=['loisirs','semaine','courses'].filter(g=>byG[g]).sort((x,y)=>byG[y]-byG[x])[0];
   if(varG&&!tips.some(t=>t.includes(GROUPS.find(g=>g.id===varG).n)))tips.push(`Ton plus gros poste variable ce mois-ci : <b>${esc(GROUPS.find(g=>g.id===varG).n)}</b> (${eur(byG[varG],0)}). C'est là que tu peux le plus facilement freiner.`);
   let abo=0;cfg.recur.forEach(r=>{if(r.acc===a.id&&r.k==='dep'&&CAT[r.c]?.g==='abos')abo+= +r.a});if(abo>0)tips.push(`Tes abonnements te coûtent ${eur(abo)} par mois : vérifie ceux que tu utilises peu.`);
-  const left=mDays(curM)-+today.slice(8)+1;if(p.fin-p.bud>-Infinity&&left>1&&p.fin+p.bud>0)tips.push(`Pour finir le mois à 0 €, limite-toi à environ ${eur(Math.max(0,(p.fin+p.bud))/left)} par jour, toutes dépenses comprises.`);
+  const left=dayN(today,mEnd);if(p.fin-p.bud>-Infinity&&left>1&&p.fin+p.bud>0)tips.push(`Pour finir le mois à 0 €, limite-toi à environ ${eur(Math.max(0,(p.fin+p.bud))/left)} par jour, toutes dépenses comprises.`);
   const src=cfg.accounts.filter(o=>o.id!==a.id&&balance(o)>=need).sort((x,y)=>balance(y)-balance(x))[0];
   return{need,tips:tips.slice(0,5),src}}
 function adviceCard(a,p){const ad=advice(a,p);if(!ad)return'';
@@ -528,15 +546,15 @@ function adviceCard(a,p){const ad=advice(a,p);if(!ad)return'';
    ${ad.tips.length?`<ul style="margin:0;padding-left:20px;display:grid;gap:6px">${ad.tips.map(t=>`<li>${t}</li>`).join('')}</ul>`:'<p class="mut">Ajoute tes dépenses et tes budgets pour recevoir des conseils plus précis.</p>'}
    ${ad.src?`<button class="pri" id="cover" data-from="${esc(ad.src.id)}" data-a="${ad.need}" style="width:100%;margin-top:14px">Transférer ${eur(ad.need,0)} depuis ${esc(ad.src.name)}</button>`:''}</div>`}
 
-function sheetBud(a,b){const st=b?{c:b.cat,g:CAT[b.cat]?.g,a:b.a,per:b.per,from:b.from||'',to:b.to||''}:{c:null,g:null,a:'',per:'s',from:today,to:''};const nextM=shiftM(curM,1)+'-01';
-  const draw=()=>{const tm=st.from&&st.from.slice(0,7)>curM?st.from.slice(0,7):curM;const mA=parseA(st.a)>0?monthAmt({a:parseA(st.a),per:st.per,from:st.from,to:st.to},tm):0;
+function sheetBud(a,b){const st=b?{c:b.cat,g:CAT[b.cat]?.g,a:b.a,per:b.per,from:b.from||'',to:b.to||''}:{c:null,g:null,a:'',per:'s',from:today,to:''};const nextM=pStart(shiftM(curM,1));
+  const draw=()=>{const tm=st.from&&pOf(st.from)>curM?pOf(st.from):curM;const mA=parseA(st.a)>0?monthAmt({a:parseA(st.a),per:st.per,from:st.from,to:st.to},tm):0;
     $('sin').innerHTML=`${shHead(b?'Modifier le budget':'Nouveau budget')}
      <span class="lab" style="margin-top:0">Pour quoi ?</span><div class="chips">${GROUPS.map(g=>`<button type="button" class="chip" data-gr="${g.id}" aria-pressed="${st.g===g.id}"><i style="background:${g.c}"></i>${esc(g.n)}</button>`).join('')}</div>
      ${st.g?`<span class="lab">Précise</span><div class="chips">${GROUPS.find(g=>g.id===st.g).cats.map(([id,n])=>`<button type="button" class="chip" data-c="${id}" aria-pressed="${st.c===id}">${esc(n)}</button>`).join('')}</div>`:''}
      <span class="lab">Montant</span><div class="amt"><input id="sa" inputmode="decimal" placeholder="150" value="${esc(st.a)}" aria-label="Montant du budget"><span>€</span></div>
      <div class="seg"><button type="button" data-p="j" aria-pressed="${st.per==='j'}">par jour</button><button type="button" data-p="s" aria-pressed="${st.per==='s'}">par semaine</button><button type="button" data-p="m" aria-pressed="${st.per==='m'}">par mois</button></div>
      <p class="mut" id="tot" style="text-align:center;margin:12px 0 0">${mA?`Soit environ <b>${e0(mA)}</b> pour ${esc(mName(tm))}`:'&nbsp;'}</p>
-     <span class="lab">Commence le</span><div class="chips" style="margin-bottom:8px"><button type="button" class="chip" data-fr="${today}" aria-pressed="${st.from===today}">Aujourd'hui</button><button type="button" class="chip" data-fr="${nextM}" aria-pressed="${st.from===nextM}">Le 1er du mois prochain</button></div><input type="date" id="bf" value="${esc(st.from)}">
+     <span class="lab">Commence le</span><div class="chips" style="margin-bottom:8px"><button type="button" class="chip" data-fr="${today}" aria-pressed="${st.from===today}">Aujourd'hui</button><button type="button" class="chip" data-fr="${nextM}" aria-pressed="${st.from===nextM}">${PD>1?'À la prochaine paie':'Le 1er du mois prochain'}</button></div><input type="date" id="bf" value="${esc(st.from)}">
      <span class="lab">Se termine le (facultatif)</span><input type="date" id="bt" value="${esc(st.to)}">
      <button class="pri go" id="ok">${b?'Enregistrer':'Créer le budget'}</button>${b?'<button class="del" id="rm">Supprimer ce budget</button>':''}<p class="mut" id="err" style="text-align:center"></p>`;
     const s=$('sin');s.querySelector('[data-close]').onclick=closeSheet;
@@ -576,10 +594,9 @@ function toast(msg,addId,isDel){$('tmsg').textContent=msg;const u=$('undo');u.st
   $('toast').style.display='flex';clearTimeout(window._tu);window._tu=setTimeout(()=>$('toast').style.display='none',5000)}
 
 // ---------- opérations répétées ----------
-function materialize(){const mo=M(curM);let ch=false;
-  cfg.recur.forEach(r=>{if((r.start||curM)>curM||(r.end&&r.end<curM+'-'+pad(Math.min(r.day||1,mDays(curM))))||mo.skip.includes(r.id)||mo.tx.some(t=>t.r===r.id))return;if(!acc(r.acc))return;
-    const t={id:nid(),acc:r.acc,k:r.k,a:r.a,c:r.c,l:r.l||'',d:curM+'-'+pad(Math.min(r.day||1,mDays(curM))),r:r.id};if(r.to)t.to=r.to;mo.tx.push(t);ch=true});
-  if(ch)mark(curM)}
+function materialize(){const ch=new Set();
+  recDates(curM).forEach(({r,d,cm})=>{const t={id:nid(),acc:r.acc,k:r.k,a:r.a,c:r.c,l:r.l||'',d,r:r.id};if(r.to)t.to=r.to;M(cm).tx.push(t);ch.add(cm)});
+  ch.forEach(mark)}
 
 // ---------- enregistrement ----------
 let noteTxt='Chargement…';function note(){const n=$('note');if(n)n.textContent=noteTxt}
@@ -587,7 +604,8 @@ function mark(key){dirty.add(key);clearTimeout(tt);tt=setTimeout(flush,400);if(l
 async function flush(){if(local){dirty.clear();return}const keys=[...dirty];dirty.clear();busy++;
   try{for(const k of keys){const ref=db.collection('data/users/'+uid).doc(k==='cfg'?'cfg7':'z'+k);const body=JSON.parse(JSON.stringify(k==='cfg'?cfg:M(k)));
     try{await ref.set(body)}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,900));try{await ref.set(body)}catch(_){}}else{noteTxt='Enregistrement impossible pour le moment.';note()}}}}finally{busy--}}
-function start(){ensure();if(!ready){ready=true;if(!cfg.groups)mark('cfg');materialize()}route()}
+function start(){if(cfg&&cfg.payday==null){const s=(cfg.recur||[]).find(r=>r.k==='rev'&&r.c==='salaire'&&r.day>1);if(s){cfg.payday=s.day;mark('cfg')}}
+  ensure();if(!ready){ready=true;vm=curM;if(!cfg.groups)mark('cfg');materialize()}route()}
 function useLocal(msg){local=true;try{const d=JSON.parse(localStorage.getItem('mes-comptes-v7')||'null');if(d){cfg=d.cfg;months=d.months||{}}}catch(e){}if(!cfg){cfg=defCfg();mark('cfg')}noteTxt=msg;start()}
 async function boot(){try{db=await claude.use('db');const u=await claude.use('user');uid=u?await u.id():null}catch(e){db=null}
   if(!db||!uid)return useLocal('Enregistré dans ce navigateur');
@@ -599,10 +617,10 @@ async function boot(){try{db=await claude.use('db');const u=await claude.use('us
     if(!c){cfg=defCfg();mark('cfg');months=ms;start();return}
     ['accounts','budgets','recur'].forEach(k=>{if(!Array.isArray(c[k]))c[k]=[]});if(!c.accounts.length)c.accounts=defCfg().accounts;
     cfg=c;months=ms;if($('sheet').classList.contains('on'))return;start()},()=>{clearTimeout(timer);useLocal('Enregistré dans ce navigateur')})}
-window.addEventListener('hashchange',()=>{tab='dep';vm=curM;openG.clear();focusG=null;showAll=false;route();window.scrollTo(0,0)});
+window.addEventListener('hashchange',()=>{tab='ops';vm=curM;openG.clear();focusG=null;showAll=false;route();window.scrollTo(0,0)});
 $('view').innerHTML='<div class="head"><div class="center"><small>Chargement…</small></div></div>';
 // ---------- mise à jour automatique (version web) ----------
-const APP_VERSION='2026-11-25.7';
+const APP_VERSION='2026-11-26.4';
 async function checkUpdate(){if(!/github\.io$/.test(location.hostname))return;
   try{const r=await fetch(location.pathname,{cache:'reload'});const t=await r.text();const m=t.match(/APP_VERSION='([^']+)'/);
     if(m&&m[1]!==APP_VERSION){if($('sheet').classList.contains('on')||$('menu').classList.contains('on')){setTimeout(checkUpdate,30000);return}location.reload()}}catch(_){}}
